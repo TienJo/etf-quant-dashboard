@@ -18,7 +18,7 @@
 </head>
 <body class="p-4 md:p-8 max-w-7xl mx-auto">
 
-    <h1 class="text-3xl font-bold text-gray-800 mb-6">ETF 量化策略：動能順勢與危機入市 (超越大盤版)</h1>
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">ETF 量化策略：動能順勢與危機入市</h1>
 
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <!-- 左側：部位管理 -->
@@ -43,7 +43,7 @@
                 </div>
                 <div>
                     <label>可用現金 (元)</label>
-                    <input type="number" id="cash" placeholder="例如: 500000" oninput="calculatePnL()">
+                    <input type="number" id="cash" placeholder="例如: 880000" value="880000" oninput="calculatePnL()">
                 </div>
             </div>
             
@@ -81,9 +81,7 @@
                 <div id="actionContainer" class="p-6 rounded-lg border-2 text-center">
                     <h3 id="actionTitle" class="text-2xl font-bold mb-2">資料讀取中...</h3>
                     <p id="actionDesc" class="text-gray-600 mb-4">正在載入市場歷史數據與演算法模型。</p>
-                    <div id="actionDetails" class="inline-block px-4 py-2 bg-white rounded shadow-sm text-sm font-bold">
-                        --
-                    </div>
+                    <div id="actionDetails" class="inline-block px-4 py-2 bg-white rounded shadow-sm text-sm font-bold">--</div>
                 </div>
             </div>
 
@@ -93,13 +91,14 @@
                 <div id="klineChart" style="width: 100%; height: 400px;"></div>
             </div>
 
-            <!-- 圖表二：回測對比 -->
+            <!-- 圖表二：3條線回測對比 -->
             <div class="card">
                 <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2 flex justify-between items-center">
-                    <span>歷史回測：超越大盤動能策略 vs 滿倉死抱 (近5年)</span>
-                    <span id="backtestMetrics" class="text-sm text-blue-600 font-bold">--</span>
+                    <span>進場策略對比：動態加減碼 vs 1年定期定額 vs 第一天全壓 (近5年)</span>
+                    <span id="backtestMetrics" class="text-xs md:text-sm text-gray-600 font-bold">--</span>
                 </h2>
-                <div id="compareChart" style="width: 100%; height: 350px;"></div>
+                <div id="compareChart" style="width: 100%; height: 450px;"></div>
+                <p class="text-xs text-gray-500 mt-2">* 模擬條件：假設 5 年前手握 100 萬現金。藍線為第一天就全買滿抱緊；綠線為分 250 個交易日(約1年)每天買一點；紅線為握有現金並依照策略指引打滿或防守。</p>
             </div>
         </div>
     </div>
@@ -142,12 +141,10 @@
         let compareChart = null;
         
         let klineRawData = { dates: [], values: [], ma20: [], ma60: [] };
-        let backtestData = { dates: [], bhReturns: [], strReturns: [] };
+        let backtestData = { dates: [], bhReturns: [], dcaReturns: [], strReturns: [] };
         let marketData = { close: 0, peak60: 0, drawdown: 0, ma20: 0, ma60: 0, zscore: 0, macdImproving: false, rightSideBreakout: false };
 
-        // 智慧雙重備援連線機制 (GitHub Local JSON -> Proxy APIs)
         async function getMarketData(ticker) {
-            // 嘗試 1：優先讀取同目錄下的 GitHub Actions 生成的 JSON
             try {
                 const res = await fetch(`./market_data.json?t=${new Date().getTime()}`);
                 if (res.ok) {
@@ -156,7 +153,6 @@
                 }
             } catch(e) { console.warn("未偵測到本地 JSON，切換至備援通道..."); }
 
-            // 嘗試 2：透過穩定 Proxy 即時抓取 Yahoo Finance
             const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
             const proxies = [
                 `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
@@ -254,18 +250,23 @@
             return { ma20, ma60, peak60, drawdown, zscore, prior5High, rightSideBreakout, macdImproving };
         }
 
-        // 全新回測引擎：保證跑贏滿倉的趨勢+避險邏輯
+        // 全新回測引擎：加入定期定額對比
         function runBacktest(dates, closes, inds) {
             const startIdx = 200; 
             if (closes.length <= startIdx) return;
             
-            let simDates = [], bhReturns = [], strReturns = [];
-            let initialCap = 1000000; 
+            let simDates = [], bhReturns = [], dcaReturns = [], strReturns = [];
+            let initialCap = 1000000; // 模擬初始資金 100萬
             
-            // 基準：無腦 100% 滿倉
+            // 基準 1：第一天全壓 (All-in)
             let bhShares = initialCap / closes[startIdx];
             
-            // 策略狀態初始化
+            // 基準 2：1年定期定額 (DCA) - 分 250 天買入
+            let dcaCash = initialCap;
+            let dcaShares = 0;
+            let dailyDcaAmt = initialCap / 250;
+
+            // 策略狀態：握有現金，動態找買點
             let strCash = initialCap;
             let strShares = 0;
             let cooldown = 0;
@@ -274,9 +275,18 @@
                 let price = closes[i];
                 simDates.push(dates[i]);
                 
-                // 基準價值
+                // 1. All-in 基準價值
                 bhReturns.push((((bhShares * price) / initialCap) - 1) * 100);
 
+                // 2. 定期定額執行 (每天扣款直到現金用完)
+                if (dcaCash > 0) {
+                    let buyAmt = Math.min(dailyDcaAmt, dcaCash);
+                    dcaShares += buyAmt / price;
+                    dcaCash -= buyAmt;
+                }
+                dcaReturns.push((((dcaCash + (dcaShares * price)) / initialCap) - 1) * 100);
+
+                // 3. 動能策略執行
                 if (cooldown > 0) cooldown--;
                 else {
                     let isCrisis = inds.drawdown[i] <= -15 || inds.zscore[i] < -1.5;
@@ -284,25 +294,23 @@
                     let isBull = price > inds.ma60[i];
                     let isBear = price < inds.ma20[i] && price < inds.ma60[i];
 
-                    // 決定當下該擁有的倉位比例 (Target Exposure)
-                    let targetExposure = -1; // -1 代表按兵不動
-                    if (isCrisis || isRebound) targetExposure = 1.0; // 危機抄底/右側重擊 (100%倉)
-                    else if (isBull) targetExposure = 1.0; // 多頭順勢 (100%倉)
-                    else if (isBear) targetExposure = 0.5; // 破線防守 (退回 50%倉)
+                    let targetExposure = -1; 
+                    if (isCrisis || isRebound) targetExposure = 1.0; 
+                    else if (isBull) targetExposure = 1.0; 
+                    else if (isBear) targetExposure = 0.5; 
 
                     if (targetExposure !== -1) {
                         let currentEquity = strCash + (strShares * price);
                         let targetStockVal = currentEquity * targetExposure;
                         let diff = targetStockVal - (strShares * price);
 
-                        // 避免無意義頻繁交易，差異超過總資產 5% 才動作
                         if (Math.abs(diff) > currentEquity * 0.05) {
-                            if (diff > 0 && strCash > 0) { // 加倉
+                            if (diff > 0 && strCash > 0) { 
                                 let buyCash = Math.min(diff, strCash);
                                 strShares += buyCash / price;
                                 strCash -= buyCash;
                                 cooldown = 5;
-                            } else if (diff < 0 && strShares > 0) { // 減倉
+                            } else if (diff < 0 && strShares > 0) { 
                                 let sellShares = Math.abs(diff) / price;
                                 if (sellShares > strShares) sellShares = strShares;
                                 strShares -= sellShares;
@@ -314,10 +322,17 @@
                 }
                 strReturns.push((((strCash + (strShares * price)) / initialCap) - 1) * 100);
             }
-            backtestData = { dates: simDates, bhReturns: bhReturns, strReturns: strReturns };
+            backtestData = { dates: simDates, bhReturns: bhReturns, dcaReturns: dcaReturns, strReturns: strReturns };
+            
             const finalBh = bhReturns[bhReturns.length-1].toFixed(1);
+            const finalDca = dcaReturns[dcaReturns.length-1].toFixed(1);
             const finalStr = strReturns[strReturns.length-1].toFixed(1);
-            document.getElementById('backtestMetrics').innerText = `總報酬：動能超額策略 ${finalStr}% | 滿倉不動 ${finalBh}%`;
+            
+            document.getElementById('backtestMetrics').innerHTML = `
+                <span class="text-red-600">策略: ${finalStr}%</span> | 
+                <span class="text-green-600">定期定額: ${finalDca}%</span> | 
+                <span class="text-blue-600">全壓: ${finalBh}%</span>
+            `;
             renderCompareChart();
         }
 
@@ -406,8 +421,8 @@
                 container.className = "p-6 rounded-lg border-2 text-center bg-red-50 border-red-600";
                 title.innerText = "🔥 危機入市：重壓 100% 抄底";
                 title.className = "text-2xl font-bold mb-2 text-red-700";
-                desc.innerText = "市場極度恐慌 (超跌或右側反轉)，利用防守期保留的現金，大膽買進便宜籌碼，這是跑贏大盤的關鍵點！";
-                details.innerText = buyShares > 0 ? `強烈建議 All-in，買入 ${buyShares} 股` : "現金已打滿，等待反彈";
+                desc.innerText = "市場極度恐慌，利用防守期保留的現金，大膽買進便宜籌碼，這是跑贏大盤的關鍵點！";
+                details.innerText = buyShares > 0 ? `強烈建議大舉進場，買入 ${buyShares} 股` : "現金已打滿，等待反彈";
             }
         }
 
@@ -434,14 +449,15 @@
             if (!compareChart) compareChart = echarts.init(document.getElementById('compareChart'));
             const option = {
                 tooltip: { trigger: 'axis', valueFormatter: (val) => val.toFixed(2) + '%' },
-                legend: { data: ['動能與危機策略 (超越版)', '滿倉死抱 (大盤基準)'], bottom: 0 },
+                legend: { data: ['動態策略 (現金開局)', '1年定期定額', '第一天全壓 (基準)'], bottom: 0 },
                 grid: { left: '8%', right: '8%', bottom: '15%', top: '10%' },
                 xAxis: { type: 'category', data: backtestData.dates, boundaryGap: false },
                 yAxis: { type: 'value', axisLabel: { formatter: '{value} %' }, splitLine: { lineStyle: { type: 'dashed' } } },
                 dataZoom: [{ type: 'inside' }, { type: 'slider', top: '85%' }],
                 series: [
-                    { name: '動能與危機策略 (超越版)', type: 'line', data: backtestData.strReturns, showSymbol: false, lineStyle: { width: 2, color: '#ef4444' } },
-                    { name: '滿倉死抱 (大盤基準)', type: 'line', data: backtestData.bhReturns, showSymbol: false, lineStyle: { width: 2, color: '#3b82f6' }, areaStyle: { color: 'rgba(59, 130, 246, 0.05)' } }
+                    { name: '動態策略 (現金開局)', type: 'line', data: backtestData.strReturns, showSymbol: false, lineStyle: { width: 2.5, color: '#ef4444' } }, // 紅線加粗
+                    { name: '1年定期定額', type: 'line', data: backtestData.dcaReturns, showSymbol: false, lineStyle: { width: 2, color: '#22c55e' } }, // 綠線
+                    { name: '第一天全壓 (基準)', type: 'line', data: backtestData.bhReturns, showSymbol: false, lineStyle: { width: 1.5, color: '#3b82f6', type: 'dashed' } } // 藍線虛線
                 ]
             };
             compareChart.setOption(option);
