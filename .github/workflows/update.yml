@@ -2,20 +2,24 @@ name: Update ETF Market Data
 
 on:
   schedule:
-    - cron: '0 8 * * 1-5' # 台灣時間每週一到週五下午 4 點 (UTC 8:00) 自動執行
-  workflow_dispatch: # 允許在 GitHub 網頁上手動點擊執行
+    - cron: '0 8 * * 1-5' # 台灣時間週一至週五 16:00
+  workflow_dispatch: # 支援手動執行
+
+# 顯式宣告 Actions 具備寫入儲存庫內容的權限
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -30,5 +34,4 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add market_data.json
-          git commit -m "Auto-update market data" || exit 0
-          git push
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update market data" && git push)
