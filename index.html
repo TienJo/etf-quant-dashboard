@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETF 高勝率量化加倉策略儀表板 (GitHub Actions 穩定版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; margin-bottom: 1.5rem; }
+        input[type="number"], select { width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px; margin-top: 0.25rem; }
+        label { font-weight: 500; font-size: 0.875rem; color: #4b5563; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { border: 1px solid #e5e7eb; padding: 0.75rem; text-align: left; font-size: 0.875rem; }
+        th { background-color: #f9fafb; font-weight: 600; }
+    </style>
+</head>
+<body class="p-4 md:p-8 max-w-7xl mx-auto">
+
+    <!-- 這裡放與上一版完全相同的 UI 結構，為了節省版面省略重複的 HTML 標籤，請將上一版的 <body> 內容全部貼上，直到 <script> 標籤之前 -->
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">ETF 量化加倉策略儀表板 (GitHub Pages 極速版)</h1>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="card lg:col-span-1">
+            <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">部位與資金設定</h2>
+            <div class="space-y-4">
+                <div>
+                    <label>監控標的</label>
+                    <select id="ticker" onchange="fetchData()">
+                        <option value="0050.TW">0050.TW (元大台灣50)</option>
+                        <option value="009816.TW">009816.TW (凱基台灣TOP50)</option>
+                        <option value="006208.TW">006208.TW (富邦台50)</option>
+                    </select>
+                </div>
+                <div>
+                    <label>持倉成本價 (元)</label>
+                    <input type="number" id="costPrice" placeholder="例如: 180" oninput="calculatePnL()">
+                </div>
+                <div>
+                    <label>目前持有股數 (1張=1000股)</label>
+                    <input type="number" id="shares" placeholder="例如: 2000" oninput="calculatePnL()">
+                </div>
+                <div>
+                    <label>可用加倉備用金 (元)</label>
+                    <input type="number" id="cash" placeholder="例如: 500000" oninput="calculatePnL()">
+                </div>
+            </div>
+            <div class="mt-6 p-4 bg-blue-50 rounded-md border border-blue-100">
+                <h3 class="font-bold text-blue-800 mb-2">當前部位損益</h3>
+                <p class="text-sm text-gray-600 mb-1">市值: <span id="marketValue" class="font-bold">0</span> 元</p>
+                <p class="text-sm text-gray-600">未實現損益: <span id="pnlAmount" class="font-bold">0</span> 元 (<span id="pnlPercent" class="font-bold">0%</span>)</p>
+            </div>
+        </div>
+
+        <div class="lg:col-span-3 space-y-6">
+            <div class="card">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="p-3 bg-gray-50 rounded border">
+                        <div class="text-xs text-gray-500">最新收盤價</div>
+                        <div id="currentPrice" class="text-xl font-bold text-gray-800">--</div>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded border">
+                        <div class="text-xs text-gray-500">自60日高點回撤</div>
+                        <div id="drawdown" class="text-xl font-bold text-gray-800">--%</div>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded border">
+                        <div class="text-xs text-gray-500">MACD 柱狀體狀態</div>
+                        <div id="macdStatus" class="text-xl font-bold text-gray-800">--</div>
+                    </div>
+                    <div class="p-3 bg-gray-50 rounded border">
+                        <div class="text-xs text-gray-500">年線 Z-Score</div>
+                        <div id="zscore" class="text-xl font-bold text-gray-800">--</div>
+                    </div>
+                </div>
+                <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">策略決策引擎 (今日建議動作)</h2>
+                <div id="actionContainer" class="p-6 rounded-lg border-2 text-center">
+                    <h3 id="actionTitle" class="text-2xl font-bold mb-2">資料讀取中...</h3>
+                    <p id="actionDesc" class="text-gray-600 mb-4">正在載入伺服器端已處理完畢的靜態數據。</p>
+                    <div id="actionDetails" class="inline-block px-4 py-2 bg-white rounded shadow-sm text-sm font-bold">--</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">近一年 K 線與策略預期區間</h2>
+                <div id="klineChart" style="width: 100%; height: 400px;"></div>
+            </div>
+
+            <div class="card">
+                <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2 flex justify-between items-center">
+                    <span>歷史回測：動態加減倉 vs 直接持有 (近5年)</span>
+                    <span id="backtestMetrics" class="text-sm text-blue-600 font-bold">--</span>
+                </h2>
+                <div id="compareChart" style="width: 100%; height: 350px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script 邏輯大幅簡化：直接讀取 GitHub 產生的 market_data.json -->
+    <script>
+        let klineChart = null;
+        let compareChart = null;
+        let klineRawData = { dates: [], values: [], ma20: [], ma60: [] };
+        let backtestData = { dates: [], bhReturns: [], strReturns: [] };
+        let marketData = { close: 0, peak60: 0, drawdown: 0, ma60: 0, zscore: 0, macdImproving: false, rightSideBreakout: false, ma20: 0, macdSignalTurnDown: false };
+
+        // 直接從靜態檔案讀取數據，不再發送外部 API 請求
+        async function fetchData() {
+            const ticker = document.getElementById('ticker').value;
+            document.getElementById('actionTitle').innerText = "讀取最新伺服器數據中...";
+            
+            try {
+                // 加上時間戳防止瀏覽器快取舊資料
+                const response = await fetch(`./market_data.json?t=${new Date().getTime()}`);
+                if (!response.ok) throw new Error("尚未生成數據檔案");
+                const allData = await response.json();
+                
+                if (!allData[ticker]) throw new Error("無此標的數據");
+                
+                const tData = allData[ticker];
+                let dates = tData.dates;
+                let closes = tData.close;
+                let ohlc = [];
+                
+                for(let i=0; i<dates.length; i++) {
+                    ohlc.push([tData.open[i], tData.close[i], tData.low[i], tData.high[i]]);
+                }
+
+                const inds = calculateAllIndicators(closes);
+                klineRawData = { dates: dates, values: ohlc, ma20: inds.ma20, ma60: inds.ma60 };
+
+                const lastIdx = closes.length - 1;
+                marketData = {
+                    close: closes[lastIdx], peak60: inds.peak60[lastIdx], drawdown: inds.drawdown[lastIdx], 
+                    ma60: inds.ma60[lastIdx], zscore: inds.zscore[lastIdx], macdImproving: inds.macdImproving[lastIdx], 
+                    rightSideBreakout: inds.rightSideBreakout[lastIdx], ma20: inds.ma20[lastIdx], macdSignalTurnDown: inds.macdTurnDown[lastIdx]
+                };
+
+                runBacktest(dates, closes, inds);
+                updateDashboardUI();
+                calculatePnL(); 
+                
+            } catch (error) {
+                console.error("資料獲取失敗:", error);
+                document.getElementById('actionTitle').innerText = "初次建置中或資料讀取失敗";
+                document.getElementById('actionDesc').innerText = "請確認 GitHub Actions 是否已成功執行並產生 market_data.json。";
+            }
+        }
+
+        function calculateAllIndicators(closes) {
+            const calculateMA = (days, data) => {
+                let res = [];
+                for(let i=0; i<data.length; i++) {
+                    if(i < days - 1) { res.push(data[i]); continue; }
+                    let sum = 0; for(let j=0; j<days; j++) sum += data[i-j];
+                    res.push(+(sum/days).toFixed(2));
+                }
+                return res;
+            };
+
+            const ma20 = calculateMA(20, closes);
+            const ma60 = calculateMA(60, closes);
+            const ma200 = calculateMA(200, closes);
+
+            let peak60 = [], drawdown = [];
+            for(let i=0; i<closes.length; i++) {
+                let start = Math.max(0, i - 59);
+                let max = Math.max(...closes.slice(start, i+1));
+                peak60.push(max);
+                drawdown.push(((closes[i] - max) / max) * 100);
+            }
+
+            let zscore = [];
+            for(let i=0; i<closes.length; i++) {
+                if (i < 199) { zscore.push(0); continue; }
+                let slice = closes.slice(i-199, i+1);
+                let mean = ma200[i];
+                let variance = slice.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / 200;
+                zscore.push((closes[i] - mean) / (Math.sqrt(variance) + 1e-9));
+            }
+
+            let prior5High = [], rightSideBreakout = [];
+            for(let i=0; i<closes.length; i++) {
+                if (i < 5) { prior5High.push(closes[i]); rightSideBreakout.push(false); continue; }
+                let max = Math.max(...closes.slice(i-5, i));
+                prior5High.push(max);
+                rightSideBreakout.push(closes[i] > max);
+            }
+
+            const calculateEMA = (data, period) => {
+                const k = 2 / (period + 1);
+                let res = [data[0]];
+                for (let i = 1; i < data.length; i++) res.push(data[i] * k + res[i - 1] * (1 - k));
+                return res;
+            };
+            const ema12 = calculateEMA(closes, 12);
+            const ema26 = calculateEMA(closes, 26);
+            const dif = ema12.map((val, i) => val - ema26[i]);
+            const signal = calculateEMA(dif, 9);
+            const hist = dif.map((val, i) => val - signal[i]);
+
+            let macdImproving = [], macdTurnDown = [];
+            for(let i=0; i<closes.length; i++) {
+                if (i === 0) { macdImproving.push(false); macdTurnDown.push(false); continue; }
+                macdImproving.push(hist[i] > hist[i-1]);
+                macdTurnDown.push(hist[i-1] > 0 && hist[i] < hist[i-1]);
+            }
+
+            return { ma20, ma60, ma200, peak60, drawdown, zscore, prior5High, rightSideBreakout, macdImproving, macdTurnDown };
+        }
+
+        function runBacktest(dates, closes, inds) {
+            const startIdx = 200; 
+            if (closes.length <= startIdx) return;
+            let simDates = [], bhReturns = [], strReturns = [];
+            let initialCapital = 1000000; 
+            let bhShares = initialCapital / closes[startIdx];
+            let strCash = initialCapital;
+            let strShares = 0;
+            let strCostBasis = 0;
+            let cooldown = 0; 
+
+            for(let i = startIdx; i < closes.length; i++) {
+                let price = closes[i];
+                simDates.push(dates[i]);
+                let currentBHEquity = bhShares * price;
+                bhReturns.push(((currentBHEquity / initialCapital) - 1) * 100);
+                let currentStrEquity = strCash + (strShares * price);
+                let pnlPct = (strShares > 0) ? ((price - strCostBasis) / strCostBasis) * 100 : 0;
+                
+                if (cooldown > 0) {
+                    cooldown--;
+                } else {
+                    if (strShares > 0 && pnlPct >= 15 && (price < inds.ma20[i] || inds.macdTurnDown[i])) {
+                        let sellShares = strShares / 3;
+                        strShares -= sellShares;
+                        strCash += (sellShares * price);
+                        cooldown = 10; 
+                    }
+                    else if (inds.zscore[i] < -1.5) {
+                        let targetAmount = currentStrEquity * 1.0;
+                        let amountToBuy = targetAmount - (strShares * price);
+                        if (amountToBuy > 0 && strCash >= amountToBuy) {
+                            let buyShares = amountToBuy / price;
+                            strCostBasis = ((strCostBasis * strShares) + (price * buyShares)) / (strShares + buyShares);
+                            strShares += buyShares;
+                            strCash -= amountToBuy;
+                            cooldown = 20;
+                        }
+                    }
+                    else if (inds.drawdown[i] <= -10 && inds.rightSideBreakout[i] && inds.macdImproving[i]) {
+                        let targetAmount = currentStrEquity * 0.65;
+                        let amountToBuy = targetAmount - (strShares * price);
+                        if (amountToBuy > 0 && strCash >= amountToBuy) {
+                            let buyShares = amountToBuy / price;
+                            strCostBasis = ((strCostBasis * strShares) + (price * buyShares)) / (strShares + buyShares);
+                            strShares += buyShares;
+                            strCash -= amountToBuy;
+                            cooldown = 20;
+                        }
+                    }
+                    else if (inds.drawdown[i] <= -8 && price < inds.ma60[i]) {
+                        let targetAmount = currentStrEquity * 0.25;
+                        let amountToBuy = targetAmount - (strShares * price);
+                        if (amountToBuy > 0 && strCash >= amountToBuy) {
+                            let buyShares = amountToBuy / price;
+                            strCostBasis = ((strCostBasis * strShares) + (price * buyShares)) / (strShares + buyShares);
+                            strShares += buyShares;
+                            strCash -= amountToBuy;
+                            cooldown = 20;
+                        }
+                    }
+                }
+                currentStrEquity = strCash + (strShares * price);
+                strReturns.push(((currentStrEquity / initialCapital) - 1) * 100);
+            }
+            backtestData = { dates: simDates, bhReturns: bhReturns, strReturns: strReturns };
+            const finalBh = bhReturns[bhReturns.length-1].toFixed(1);
+            const finalStr = strReturns[strReturns.length-1].toFixed(1);
+            document.getElementById('backtestMetrics').innerText = `總報酬：動態策略 ${finalStr}% | 持有基準 ${finalBh}%`;
+            renderCompareChart();
+        }
+
+        function updateDashboardUI() {
+            document.getElementById('currentPrice').innerText = marketData.close.toFixed(2);
+            const ddEl = document.getElementById('drawdown');
+            ddEl.innerText = marketData.drawdown.toFixed(2) + "%";
+            ddEl.className = `text-xl font-bold ${marketData.drawdown < -8 ? 'text-red-600' : 'text-gray-800'}`;
+            const macdEl = document.getElementById('macdStatus');
+            macdEl.innerText = marketData.macdImproving ? "向上收斂或翻紅" : "向下轉弱";
+            macdEl.className = `text-xl font-bold ${marketData.macdImproving ? 'text-green-600' : 'text-red-600'}`;
+            const zEl = document.getElementById('zscore');
+            zEl.innerText = marketData.zscore.toFixed(2);
+            zEl.className = `text-xl font-bold ${marketData.zscore < -1.5 ? 'text-red-600' : 'text-gray-800'}`;
+        }
+
+        function evaluateStrategy() {
+            const { close, drawdown, ma60, zscore, macdImproving, rightSideBreakout, ma20, macdSignalTurnDown } = marketData;
+            const costPrice = parseFloat(document.getElementById('costPrice').value) || 0;
+            let profitPercent = 0;
+            if (costPrice > 0) { profitPercent = ((close - costPrice) / costPrice) * 100; }
+
+            let state = "WAIT"; 
+            if (costPrice > 0 && profitPercent >= 15 && (close < ma20 || macdSignalTurnDown)) { state = "TRIM"; }
+            else if (zscore < -1.5) { state = "TIER3"; }
+            else if (drawdown <= -10 && rightSideBreakout && macdImproving) { state = "TIER2"; }
+            else if (drawdown <= -8 && close < ma60) { state = "TIER1"; }
+
+            renderAction(state);
+            renderKlineChart(state); 
+        }
+
+        function renderAction(state) {
+            const container = document.getElementById('actionContainer');
+            const title = document.getElementById('actionTitle');
+            const desc = document.getElementById('actionDesc');
+            const details = document.getElementById('actionDetails');
+            const cash = parseFloat(document.getElementById('cash').value) || 0;
+            const price = marketData.close;
+            let buyShares = 0;
+
+            if (state === "WAIT") {
+                container.className = "p-6 rounded-lg border-2 text-center bg-gray-50 border-gray-300";
+                title.innerText = "持股續抱與靜待時機";
+                title.className = "text-2xl font-bold mb-2 text-gray-700";
+                desc.innerText = "目前未觸發加倉或減倉條件；請對照下方圖表綠色區塊，等待價格落入潛在建倉區間再啟動交易。";
+                details.innerText = "無建議動作";
+            } 
+            else if (state === "TIER1") {
+                buyShares = Math.floor((cash * 0.25) / price);
+                container.className = "p-6 rounded-lg border-2 text-center bg-blue-50 border-blue-400";
+                title.innerText = "觸發第一梯次：左側初探防守";
+                title.className = "text-2xl font-bold mb-2 text-blue-700";
+                desc.innerText = "回撤達百分之八且跌破季線；買入建立基本防守部位，操作後請鎖定圖表中的紅色目標停利區間。";
+                details.innerText = cash > 0 ? `預計動用 25% 資金，約可買入 ${buyShares} 股` : "填入可用資金即可換算購買股數";
+            }
+            else if (state === "TIER2") {
+                buyShares = Math.floor((cash * 0.40) / price);
+                container.className = "p-6 rounded-lg border-2 text-center bg-green-50 border-green-500";
+                title.innerText = "觸發第二梯次：右側動能確認";
+                title.className = "text-2xl font-bold mb-2 text-green-700";
+                desc.innerText = "空方力竭現象明確呈現，此階段具備極高勝率，將倉位穩定擴增至百分之六十五。";
+                details.innerText = cash > 0 ? `預計動用 40% 資金，約可買入 ${buyShares} 股` : "填入可用資金即可換算購買股數";
+            }
+            else if (state === "TIER3") {
+                buyShares = Math.floor((cash * 0.35) / price);
+                container.className = "p-6 rounded-lg border-2 text-center bg-red-50 border-red-500";
+                title.innerText = "觸發第三梯次：極限超跌摸底";
+                title.className = "text-2xl font-bold mb-2 text-red-700";
+                desc.innerText = "市場處於深度恐慌與錯殺狀態，為長線滿倉佈局的關鍵轉折點。";
+                details.innerText = cash > 0 ? `預計動用剩餘全數資金，約可買入 ${buyShares} 股` : "填入可用資金即可換算購買股數";
+            }
+            else if (state === "TRIM") {
+                const currentShares = parseFloat(document.getElementById('shares').value) || 0;
+                const sellShares = Math.floor(currentShares / 3);
+                container.className = "p-6 rounded-lg border-2 text-center bg-yellow-50 border-yellow-400";
+                title.innerText = "觸發減倉停利：右側轉弱";
+                title.className = "text-2xl font-bold mb-2 text-yellow-700";
+                desc.innerText = "獲利超越百分之十五且技術指標出現轉弱跡象，適度轉換為現金以便後續回檔操作。";
+                details.innerText = currentShares > 0 ? `預計賣出三分之一倉位，約為 ${sellShares} 股` : "分批逢高減碼為主";
+            }
+        }
+
+        function renderKlineChart(state) {
+            if (!klineChart) klineChart = echarts.init(document.getElementById('klineChart'));
+            let markAreaData = [];
+            const peak60 = marketData.peak60;
+            const currentClose = marketData.close;
+            if (state === "WAIT" || state === "TRIM") {
+                markAreaData = [[{ yAxis: peak60 * 0.92, itemStyle: { color: 'rgba(34, 197, 94, 0.1)' }, label: { show: true, position: 'insideTopLeft', formatter: '潛在建倉區間 (回撤超過百分之八)', color: '#166534', fontWeight: 'bold' }}, { yAxis: peak60 * 0.85 }]];
+            } else {
+                markAreaData = [[{ yAxis: currentClose * 1.15, itemStyle: { color: 'rgba(239, 68, 68, 0.1)' }, label: { show: true, position: 'insideBottomLeft', formatter: '目標停利區間 (獲利超過百分之十五)', color: '#991b1b', fontWeight: 'bold' }}, { yAxis: currentClose * 1.25 }]];
+            }
+            const option = {
+                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                legend: { data: ['日K線', '月線', '季線'], bottom: 0 },
+                grid: { left: '8%', right: '8%', bottom: '15%', top: '5%' },
+                xAxis: { type: 'category', data: klineRawData.dates, scale: true, boundaryGap: false, splitLine: { show: false } },
+                yAxis: { scale: true, splitArea: { show: true } },
+                dataZoom: [{ type: 'inside', start: 60, end: 100 }, { show: true, type: 'slider', top: '85%', start: 60, end: 100 }],
+                series: [
+                    { name: '日K線', type: 'candlestick', data: klineRawData.values, itemStyle: { color: '#ef4444', color0: '#22c55e', borderColor: '#ef4444', borderColor0: '#22c55e' }, markArea: { silent: true, data: markAreaData } },
+                    { name: '月線', type: 'line', data: klineRawData.ma20, smooth: true, showSymbol: false, lineStyle: { width: 1.5, color: '#eab308' } },
+                    { name: '季線', type: 'line', data: klineRawData.ma60, smooth: true, showSymbol: false, lineStyle: { width: 1.5, color: '#3b82f6' } }
+                ]
+            };
+            klineChart.setOption(option);
+        }
+
+        function renderCompareChart() {
+            if (!compareChart) compareChart = echarts.init(document.getElementById('compareChart'));
+            const option = {
+                tooltip: { trigger: 'axis', valueFormatter: (val) => val.toFixed(2) + '%' },
+                legend: { data: ['動態策略', '直接持有'], bottom: 0 },
+                grid: { left: '8%', right: '8%', bottom: '15%', top: '10%' },
+                xAxis: { type: 'category', data: backtestData.dates, boundaryGap: false },
+                yAxis: { type: 'value', axisLabel: { formatter: '{value} %' }, splitLine: { lineStyle: { type: 'dashed' } } },
+                dataZoom: [{ type: 'inside' }, { type: 'slider', top: '85%' }],
+                series: [
+                    { name: '動態策略', type: 'line', data: backtestData.strReturns, showSymbol: false, lineStyle: { width: 2, color: '#ef4444' }, areaStyle: { color: 'rgba(239, 68, 68, 0.05)' } },
+                    { name: '直接持有', type: 'line', data: backtestData.bhReturns, showSymbol: false, lineStyle: { width: 2, color: '#3b82f6' } }
+                ]
+            };
+            compareChart.setOption(option);
+        }
+
+        window.addEventListener('resize', function() { if (klineChart) klineChart.resize(); if (compareChart) compareChart.resize(); });
+
+        function calculatePnL() {
+            const cost = parseFloat(document.getElementById('costPrice').value);
+            const shares = parseFloat(document.getElementById('shares').value);
+            if (cost > 0 && shares > 0 && marketData.close > 0) {
+                const marketVal = shares * marketData.close;
+                const totalCost = shares * cost;
+                const pnl = marketVal - totalCost;
+                const pnlPct = (pnl / totalCost) * 100;
+                document.getElementById('marketValue').innerText = marketVal.toLocaleString(undefined, {maximumFractionDigits: 0});
+                const pnlEl = document.getElementById('pnlAmount');
+                const pnlPctEl = document.getElementById('pnlPercent');
+                pnlEl.innerText = pnl.toLocaleString(undefined, {maximumFractionDigits: 0});
+                pnlPctEl.innerText = pnlPct.toFixed(2) + "%";
+                pnlEl.className = pnl > 0 ? "font-bold text-red-600" : "font-bold text-green-600";
+                pnlPctEl.className = pnl > 0 ? "font-bold text-red-600" : "font-bold text-green-600";
+            } else {
+                document.getElementById('marketValue').innerText = "0";
+                document.getElementById('pnlAmount').innerText = "0";
+                document.getElementById('pnlAmount').className = "font-bold";
+                document.getElementById('pnlPercent').innerText = "0%";
+                document.getElementById('pnlPercent').className = "font-bold";
+            }
+            if(marketData.close > 0) evaluateStrategy();
+        }
+
+        window.onload = fetchData;
+    </script>
+</body>
+</html>
