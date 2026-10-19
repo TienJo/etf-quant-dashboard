@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ETF 動能趨勢與危機入市 智能儀表板</title>
+    <title>ETF 全方位進場策略對比儀表板</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <style>
@@ -18,12 +18,12 @@
 </head>
 <body class="p-4 md:p-8 max-w-7xl mx-auto">
 
-    <h1 class="text-3xl font-bold text-gray-800 mb-6">ETF 量化策略：動能順勢與危機入市</h1>
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">ETF 資金部署：終極四線對比儀表板</h1>
 
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <!-- 左側：部位管理 -->
+        <!-- 左側：參數設定 -->
         <div class="card lg:col-span-1">
-            <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">部位與資金設定</h2>
+            <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">資金與扣款參數設定</h2>
             <div class="space-y-4">
                 <div>
                     <label>監控標的</label>
@@ -34,24 +34,24 @@
                     </select>
                 </div>
                 <div>
-                    <label>持倉成本價 (元)</label>
-                    <input type="number" id="costPrice" placeholder="例如: 180" oninput="calculatePnL()">
+                    <label>準備投入總資金 (元)</label>
+                    <input type="number" id="cash" placeholder="例如: 880000" value="880000" oninput="runLocalBacktest()">
                 </div>
-                <div>
-                    <label>目前持有股數 (1張=1000股)</label>
-                    <input type="number" id="shares" placeholder="例如: 2000" oninput="calculatePnL()">
-                </div>
-                <div>
-                    <label>可用現金 (元)</label>
-                    <input type="number" id="cash" placeholder="例如: 880000" value="880000" oninput="calculatePnL()">
+                <div class="p-3 bg-gray-50 border rounded-md mt-4">
+                    <label class="text-gray-700 font-bold text-sm">【智能日日扣 參數】</label>
+                    <div class="mt-2 text-xs text-blue-700">🟢 常態每日扣款 (站上月線)</div>
+                    <input type="number" id="baseAmt" value="3500" oninput="runLocalBacktest()">
+                    <div class="mt-2 text-xs text-yellow-700">🟡 跌破月線加碼</div>
+                    <input type="number" id="ma20Amt" value="4500" oninput="runLocalBacktest()">
+                    <div class="mt-2 text-xs text-red-700">🔴 跌破季線重壓</div>
+                    <input type="number" id="ma60Amt" value="8000" oninput="runLocalBacktest()">
                 </div>
             </div>
             
-            <div class="mt-6 p-4 bg-blue-50 rounded-md border border-blue-100">
-                <h3 class="font-bold text-blue-800 mb-2">當前帳戶狀態</h3>
-                <p class="text-sm text-gray-600 mb-1">股票市值: <span id="marketValue" class="font-bold">0</span> 元</p>
-                <p class="text-sm text-gray-600 mb-1">未實現損益: <span id="pnlAmount" class="font-bold">0</span> 元 (<span id="pnlPercent" class="font-bold">0%</span>)</p>
-                <p class="text-sm text-gray-600 mt-2 border-t pt-2">總資產 (股+現): <span id="totalEquity" class="font-bold text-blue-700">0</span> 元</p>
+            <div class="mt-6 p-4 bg-purple-50 rounded-md border border-purple-100">
+                <h3 class="font-bold text-purple-800 mb-1">【金字塔戰法 參數】</h3>
+                <p class="text-xs text-purple-600 mb-1">總資金將自動切分為 10 層兵力</p>
+                <p class="text-sm text-gray-700">單層基準: <span id="layerValue" class="font-bold">88,000</span> 元</p>
             </div>
         </div>
 
@@ -64,85 +64,57 @@
                         <div id="currentPrice" class="text-xl font-bold text-gray-800">--</div>
                     </div>
                     <div class="p-3 bg-gray-50 rounded border">
-                        <div class="text-xs text-gray-500">自60日高點回撤</div>
+                        <div class="text-xs text-gray-500">波段回撤幅度</div>
                         <div id="drawdown" class="text-xl font-bold text-gray-800">--%</div>
                     </div>
                     <div class="p-3 bg-gray-50 rounded border">
-                        <div class="text-xs text-gray-500">大盤均線狀態</div>
-                        <div id="trendStatus" class="text-xl font-bold text-gray-800">--</div>
+                        <div class="text-xs text-gray-500">月線 (20MA) 狀態</div>
+                        <div id="ma20Status" class="text-xl font-bold text-gray-800">--</div>
                     </div>
                     <div class="p-3 bg-gray-50 rounded border">
-                        <div class="text-xs text-gray-500">年線 Z-Score</div>
-                        <div id="zscore" class="text-xl font-bold text-gray-800">--</div>
+                        <div class="text-xs text-gray-500">季線 (60MA) 狀態</div>
+                        <div id="ma60Status" class="text-xl font-bold text-gray-800">--</div>
                     </div>
                 </div>
 
                 <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">今日策略行動指南</h2>
-                <div id="actionContainer" class="p-6 rounded-lg border-2 text-center">
-                    <h3 id="actionTitle" class="text-2xl font-bold mb-2">資料讀取中...</h3>
-                    <p id="actionDesc" class="text-gray-600 mb-4">正在載入市場歷史數據與演算法模型。</p>
-                    <div id="actionDetails" class="inline-block px-4 py-2 bg-white rounded shadow-sm text-sm font-bold">--</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-4 rounded-lg border-2 border-blue-200 bg-blue-50 text-center">
+                        <h3 class="text-sm font-bold text-blue-700 mb-1">智能條件日扣 建議</h3>
+                        <div id="smartAction" class="text-2xl font-bold text-blue-900">-- 元</div>
+                    </div>
+                    <div class="p-4 rounded-lg border-2 border-purple-200 bg-purple-50 text-center">
+                        <h3 class="text-sm font-bold text-purple-700 mb-1">金字塔大額加倉 建議</h3>
+                        <div id="pyramidAction" class="text-lg font-bold text-purple-900 mt-1">--</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- 圖表一：K線與進出場區間 -->
-            <div class="card">
-                <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">近一年 K 線與動能結構</h2>
-                <div id="klineChart" style="width: 100%; height: 400px;"></div>
-            </div>
-
-            <!-- 圖表二：3條線回測對比 -->
+            <!-- 圖表一：四線回測對比 -->
             <div class="card">
                 <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2 flex justify-between items-center">
-                    <span>進場策略對比：動態加減碼 vs 1年定期定額 vs 第一天全壓 (近5年)</span>
-                    <span id="backtestMetrics" class="text-xs md:text-sm text-gray-600 font-bold">--</span>
+                    <span>進攻回測：四種建倉法終極對決 (近 5 年)</span>
                 </h2>
                 <div id="compareChart" style="width: 100%; height: 450px;"></div>
-                <p class="text-xs text-gray-500 mt-2">* 模擬條件：假設 5 年前手握 100 萬現金。藍線為第一天就全買滿抱緊；綠線為分 250 個交易日(約1年)每天買一點；紅線為握有現金並依照策略指引打滿或防守。</p>
+                <div id="backtestMetrics" class="text-sm font-bold mt-3 text-center grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <!-- Metrics injected via JS -->
+                </div>
+                <p class="text-xs text-gray-500 mt-3">* 模擬情境：假設起手握有 88 萬純現金。金字塔戰法創新高會平倉重置；智能日扣則是不斷買進直到資金用完。</p>
             </div>
-        </div>
-    </div>
-
-    <!-- 策略邏輯說明 -->
-    <div class="card">
-        <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">策略核心邏輯 (跑贏大盤的秘密)</h2>
-        <div class="overflow-x-auto">
-            <table>
-                <thead>
-                    <tr>
-                        <th>市場狀態 (觸發條件)</th>
-                        <th>執行動作與資金配比</th>
-                        <th>策略意義</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>🟢 多頭主升段 (順勢滿倉)</strong><br>股價 > 季線 (60MA)</td>
-                        <td>將資金加至 <strong>100% 滿倉</strong></td>
-                        <td>避免踏空大牛市。只要趨勢向上，就不預測高點，吃滿所有波段紅利。</td>
-                    </tr>
-                    <tr>
-                        <td><strong>🟡 破線防守 (閃避主跌段)</strong><br>股價 < 月線 (20MA) 且 < 季線 (60MA)</td>
-                        <td>將持倉降至 <strong>50% (保留50%現金)</strong></td>
-                        <td>當空頭趨勢確立時，立刻抽出資金防守。這是策略能大幅降低大回撤 (如2022年) 的關鍵。</td>
-                    </tr>
-                    <tr>
-                        <td><strong>🔴 危機入市 (獲取超額報酬)</strong><br>回撤 > 15% 且 Z-Score < -1.5</td>
-                        <td>動用所有現金 <strong>100% 重壓抄底</strong></td>
-                        <td>利用防守階段保留的現金，在市場極度恐慌時買入比原先更多的股數。當大盤反彈時，獲利將瞬間超越大盤。</td>
-                    </tr>
-                </tbody>
-            </table>
+            
+            <!-- 圖表二：K線 -->
+            <div class="card">
+                <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">近一年 K 線與均線結構</h2>
+                <div id="klineChart" style="width: 100%; height: 400px;"></div>
+            </div>
         </div>
     </div>
 
     <script>
-        let klineChart = null;
         let compareChart = null;
-        
-        let klineRawData = { dates: [], values: [], ma20: [], ma60: [] };
-        let backtestData = { dates: [], bhReturns: [], dcaReturns: [], strReturns: [] };
-        let marketData = { close: 0, peak60: 0, drawdown: 0, ma20: 0, ma60: 0, zscore: 0, macdImproving: false, rightSideBreakout: false };
+        let klineChart = null;
+        let globalData = null; 
+        let marketData = {};
 
         async function getMarketData(ticker) {
             try {
@@ -151,7 +123,7 @@
                     const data = await res.json();
                     if (data[ticker]) return data[ticker];
                 }
-            } catch(e) { console.warn("未偵測到本地 JSON，切換至備援通道..."); }
+            } catch(e) {}
 
             const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
             const proxies = [
@@ -178,320 +150,250 @@
                             return d;
                         }
                     }
-                } catch (error) { console.warn("Proxy 嘗試失敗..."); }
+                } catch (error) {}
             }
-            throw new Error("無法取得市場數據，請檢查網路狀態。");
+            throw new Error("無法取得市場數據");
         }
 
         async function fetchData() {
             const ticker = document.getElementById('ticker').value;
-            document.getElementById('actionTitle').innerText = "啟動策略引擎中...";
-            document.getElementById('actionDesc').innerText = "正在分析市場動能與波動架構。";
-            
             try {
                 const tData = await getMarketData(ticker);
-                let ohlc = [];
-                for(let i=0; i<tData.dates.length; i++) ohlc.push([tData.open[i], tData.close[i], tData.low[i], tData.high[i]]);
+                
+                // Indicators calculation
+                const calcMA = (d, data) => data.map((_, i, arr) => i < d-1 ? data[i] : +(arr.slice(i-d+1, i+1).reduce((a,b)=>a+b)/d).toFixed(2));
+                const ma20 = calcMA(20, tData.close);
+                const ma60 = calcMA(60, tData.close);
+                
+                let peak60 = [], drawdown = [], prior5High = [], rightSideBreakout = [];
+                for(let i=0; i<tData.close.length; i++) {
+                    let p60 = Math.max(...tData.close.slice(Math.max(0, i-59), i+1));
+                    peak60.push(p60);
+                    drawdown.push(((tData.close[i] - p60) / p60) * 100);
 
-                const inds = calculateIndicators(tData.close);
-                klineRawData = { dates: tData.dates, values: ohlc, ma20: inds.ma20, ma60: inds.ma60 };
+                    if (i < 5) { prior5High.push(tData.close[i]); rightSideBreakout.push(false); }
+                    else {
+                        let p5H = Math.max(...tData.close.slice(i-5, i));
+                        prior5High.push(p5H);
+                        rightSideBreakout.push(tData.close[i] > p5H);
+                    }
+                }
 
+                const calcEMA = (data, p) => { let k=2/(p+1), res=[data[0]]; for(let i=1;i<data.length;i++) res.push(data[i]*k+res[i-1]*(1-k)); return res; };
+                const dif = calcEMA(tData.close, 12).map((v, i) => v - calcEMA(tData.close, 26)[i]);
+                const hist = dif.map((v, i) => v - calcEMA(dif, 9)[i]);
+                const macdImproving = hist.map((v, i) => i === 0 ? false : v > hist[i-1]);
+
+                globalData = { dates: tData.dates, closes: tData.close, open: tData.open, high: tData.high, low: tData.low, ma20: ma20, ma60: ma60, peak60: peak60, drawdown: drawdown, rightSideBreakout: rightSideBreakout, macdImproving: macdImproving };
+                
                 const lastIdx = tData.close.length - 1;
                 marketData = {
-                    close: tData.close[lastIdx], peak60: inds.peak60[lastIdx], drawdown: inds.drawdown[lastIdx], 
-                    ma20: inds.ma20[lastIdx], ma60: inds.ma60[lastIdx], zscore: inds.zscore[lastIdx], 
-                    macdImproving: inds.macdImproving[lastIdx], rightSideBreakout: inds.rightSideBreakout[lastIdx]
+                    close: tData.close[lastIdx], peak60: peak60[lastIdx], drawdown: drawdown[lastIdx], 
+                    ma20: ma20[lastIdx], ma60: ma60[lastIdx], rightSideBreakout: rightSideBreakout[lastIdx], macdImproving: macdImproving[lastIdx]
                 };
 
-                runBacktest(tData.dates, tData.close, inds);
-                updateDashboardUI();
-                calculatePnL(); 
+                updateStatusUI();
+                runLocalBacktest(); 
+                renderKlineChart();
                 
             } catch (error) {
                 console.error(error);
-                document.getElementById('actionTitle').innerText = "資料讀取失敗";
-                document.getElementById('actionDesc').innerText = "網路連線異常或受到阻擋。";
             }
         }
 
-        function calculateIndicators(closes) {
-            const calcMA = (d, data) => data.map((_, i, arr) => i < d-1 ? data[i] : +(arr.slice(i-d+1, i+1).reduce((a,b)=>a+b)/d).toFixed(2));
-            const ma20 = calcMA(20, closes);
-            const ma60 = calcMA(60, closes);
-            const ma200 = calcMA(200, closes);
+        function updateStatusUI() {
+            const price = marketData.close;
+            document.getElementById('currentPrice').innerText = price.toFixed(2);
+            
+            let ddEl = document.getElementById('drawdown');
+            ddEl.innerText = marketData.drawdown.toFixed(2) + "%";
+            ddEl.className = `text-xl font-bold ${marketData.drawdown <= -5 ? 'text-red-600' : 'text-gray-800'}`;
 
-            let peak60 = [], drawdown = [], zscore = [], prior5High = [], rightSideBreakout = [];
-            for(let i=0; i<closes.length; i++) {
-                let start60 = Math.max(0, i - 59);
-                let p60 = Math.max(...closes.slice(start60, i+1));
-                peak60.push(p60);
-                drawdown.push(((closes[i] - p60) / p60) * 100);
+            let ma20El = document.getElementById('ma20Status');
+            if (price > marketData.ma20) { ma20El.innerText = "站上月線"; ma20El.className = "text-xl font-bold text-green-600"; }
+            else { ma20El.innerText = "跌破月線"; ma20El.className = "text-xl font-bold text-red-600"; }
 
-                if (i < 199) zscore.push(0);
-                else {
-                    let slice = closes.slice(i-199, i+1);
-                    let variance = slice.reduce((acc, val) => acc + Math.pow(val - ma200[i], 2), 0) / 200;
-                    zscore.push((closes[i] - ma200[i]) / (Math.sqrt(variance) + 1e-9));
-                }
+            let ma60El = document.getElementById('ma60Status');
+            if (price > marketData.ma60) { ma60El.innerText = "站上季線"; ma60El.className = "text-xl font-bold text-green-600"; }
+            else { ma60El.innerText = "跌破季線"; ma60El.className = "text-xl font-bold text-red-600"; }
+            
+            // UI Update: Smart Action
+            const baseAmt = parseFloat(document.getElementById('baseAmt').value) || 3500;
+            const ma20Amt = parseFloat(document.getElementById('ma20Amt').value) || 4500;
+            const ma60Amt = parseFloat(document.getElementById('ma60Amt').value) || 8000;
+            
+            let todayAmt = baseAmt;
+            if (price < marketData.ma60) todayAmt = ma60Amt;
+            else if (price < marketData.ma20) todayAmt = ma20Amt;
+            document.getElementById('smartAction').innerText = todayAmt.toLocaleString() + " 元";
 
-                if (i < 5) { prior5High.push(closes[i]); rightSideBreakout.push(false); }
-                else {
-                    let p5H = Math.max(...closes.slice(i-5, i));
-                    prior5High.push(p5H);
-                    rightSideBreakout.push(closes[i] > p5H);
-                }
+            // UI Update: Pyramid Action
+            let pyrAction = "不動 / 等待跌幅";
+            if (marketData.drawdown <= -5 && marketData.rightSideBreakout && marketData.macdImproving) {
+                pyrAction = "🔥 右側確立，打滿剩餘資金";
+            } else if (price < marketData.ma60 && marketData.drawdown <= -8) {
+                pyrAction = "🔴 破季線，投入 3 層資金";
+            } else if (price < marketData.ma20 && marketData.drawdown <= -5) {
+                pyrAction = "🛡️ 破月線，投入 2 層資金";
+            } else if (marketData.drawdown <= -5) {
+                pyrAction = "🔵 跌 5%，投入 1 層資金";
             }
-
-            const calcEMA = (data, p) => { let k=2/(p+1), res=[data[0]]; for(let i=1;i<data.length;i++) res.push(data[i]*k+res[i-1]*(1-k)); return res; };
-            const dif = calcEMA(closes, 12).map((v, i) => v - calcEMA(closes, 26)[i]);
-            const hist = dif.map((v, i) => v - calcEMA(dif, 9)[i]);
-            const macdImproving = hist.map((v, i) => i === 0 ? false : v > hist[i-1]);
-
-            return { ma20, ma60, peak60, drawdown, zscore, prior5High, rightSideBreakout, macdImproving };
+            document.getElementById('pyramidAction').innerText = pyrAction;
         }
 
-        // 全新回測引擎：加入定期定額對比
-        function runBacktest(dates, closes, inds) {
+        // 當使用者修改金額時，即時重跑回測
+        function runLocalBacktest() {
+            if (!globalData) return;
+            
+            const { closes, dates, ma20, ma60, peak60, drawdown, rightSideBreakout, macdImproving } = globalData;
             const startIdx = 200; 
             if (closes.length <= startIdx) return;
             
-            let simDates = [], bhReturns = [], dcaReturns = [], strReturns = [];
-            let initialCap = 1000000; // 模擬初始資金 100萬
+            const initialCap = parseFloat(document.getElementById('cash').value) || 880000;
+            const baseAmt = parseFloat(document.getElementById('baseAmt').value) || 3500;
+            const ma20Amt = parseFloat(document.getElementById('ma20Amt').value) || 4500;
+            const ma60Amt = parseFloat(document.getElementById('ma60Amt').value) || 8000;
             
-            // 基準 1：第一天全壓 (All-in)
+            document.getElementById('layerValue').innerText = (initialCap / 10).toLocaleString();
+
+            let simDates = [], bhReturns = [], dcaReturns = [], smartReturns = [], pyrReturns = [];
+            
+            // 1. 第一天全壓 (All-in)
             let bhShares = initialCap / closes[startIdx];
             
-            // 基準 2：1年定期定額 (DCA) - 分 250 天買入
-            let dcaCash = initialCap;
-            let dcaShares = 0;
-            let dailyDcaAmt = initialCap / 250;
+            // 2. 傳統定額日日扣
+            let dcaCash = initialCap, dcaShares = 0;
+            
+            // 3. 智能加碼日日扣
+            let smartCash = initialCap, smartShares = 0;
 
-            // 策略狀態：握有現金，動態找買點
-            let strCash = initialCap;
-            let strShares = 0;
-            let cooldown = 0;
+            // 4. 金字塔戰法
+            let pyrCash = initialCap, pyrShares = 0;
+            let layerSize = pyrCash / 10;
+            let lastBuyPrice = -1;
 
             for(let i = startIdx; i < closes.length; i++) {
                 let price = closes[i];
                 simDates.push(dates[i]);
                 
-                // 1. All-in 基準價值
+                // --- All-in ---
                 bhReturns.push((((bhShares * price) / initialCap) - 1) * 100);
 
-                // 2. 定期定額執行 (每天扣款直到現金用完)
+                // --- Traditional DCA ---
                 if (dcaCash > 0) {
-                    let buyAmt = Math.min(dailyDcaAmt, dcaCash);
+                    let buyAmt = Math.min(baseAmt, dcaCash);
                     dcaShares += buyAmt / price;
                     dcaCash -= buyAmt;
                 }
                 dcaReturns.push((((dcaCash + (dcaShares * price)) / initialCap) - 1) * 100);
 
-                // 3. 動能策略執行
-                if (cooldown > 0) cooldown--;
-                else {
-                    let isCrisis = inds.drawdown[i] <= -15 || inds.zscore[i] < -1.5;
-                    let isRebound = inds.drawdown[i] <= -10 && inds.rightSideBreakout[i] && inds.macdImproving[i];
-                    let isBull = price > inds.ma60[i];
-                    let isBear = price < inds.ma20[i] && price < inds.ma60[i];
+                // --- Smart DCA ---
+                if (smartCash > 0) {
+                    let targetAmt = baseAmt;
+                    if (price < ma60[i]) targetAmt = ma60Amt;
+                    else if (price < ma20[i]) targetAmt = ma20Amt;
+                    
+                    let buyAmt = Math.min(targetAmt, smartCash);
+                    smartShares += buyAmt / price;
+                    smartCash -= buyAmt;
+                }
+                smartReturns.push((((smartCash + (smartShares * price)) / initialCap) - 1) * 100);
 
-                    let targetExposure = -1; 
-                    if (isCrisis || isRebound) targetExposure = 1.0; 
-                    else if (isBull) targetExposure = 1.0; 
-                    else if (isBear) targetExposure = 0.5; 
+                // --- Pyramid ---
+                if (price >= peak60[i]) {
+                    if (pyrShares > 0) {
+                        pyrCash += pyrShares * price;
+                        pyrShares = 0;
+                        lastBuyPrice = -1;
+                    }
+                    layerSize = pyrCash / 10;
+                }
 
-                    if (targetExposure !== -1) {
-                        let currentEquity = strCash + (strShares * price);
-                        let targetStockVal = currentEquity * targetExposure;
-                        let diff = targetStockVal - (strShares * price);
-
-                        if (Math.abs(diff) > currentEquity * 0.05) {
-                            if (diff > 0 && strCash > 0) { 
-                                let buyCash = Math.min(diff, strCash);
-                                strShares += buyCash / price;
-                                strCash -= buyCash;
-                                cooldown = 5;
-                            } else if (diff < 0 && strShares > 0) { 
-                                let sellShares = Math.abs(diff) / price;
-                                if (sellShares > strShares) sellShares = strShares;
-                                strShares -= sellShares;
-                                strCash += sellShares * price;
-                                cooldown = 5;
-                            }
-                        }
+                if (drawdown[i] <= -5 && lastBuyPrice === -1 && pyrCash >= layerSize * 1) {
+                    pyrShares += (layerSize * 1) / price; pyrCash -= (layerSize * 1); lastBuyPrice = price;
+                }
+                if (price < ma20[i] && lastBuyPrice > 0 && price <= lastBuyPrice * 0.97 && pyrCash >= layerSize * 2) {
+                    if (pyrShares > 0 && pyrShares <= ((layerSize*2.5)/price)) { 
+                        pyrShares += (layerSize * 2) / price; pyrCash -= (layerSize * 2); lastBuyPrice = price;
                     }
                 }
-                strReturns.push((((strCash + (strShares * price)) / initialCap) - 1) * 100);
+                if (price < ma60[i] && lastBuyPrice > 0 && price <= lastBuyPrice * 0.97 && pyrCash >= layerSize * 3) {
+                    if (drawdown[i] <= -8) {
+                        pyrShares += (layerSize * 3) / price; pyrCash -= (layerSize * 3); lastBuyPrice = price;
+                    }
+                }
+                if (drawdown[i] <= -5 && rightSideBreakout[i] && macdImproving[i] && pyrCash > 1000) {
+                    pyrShares += pyrCash / price; pyrCash = 0; lastBuyPrice = price;
+                }
+
+                pyrReturns.push((((pyrCash + (pyrShares * price)) / initialCap) - 1) * 100);
             }
-            backtestData = { dates: simDates, bhReturns: bhReturns, dcaReturns: dcaReturns, strReturns: strReturns };
             
-            const finalBh = bhReturns[bhReturns.length-1].toFixed(1);
-            const finalDca = dcaReturns[dcaReturns.length-1].toFixed(1);
-            const finalStr = strReturns[strReturns.length-1].toFixed(1);
+            const fBh = bhReturns[bhReturns.length-1].toFixed(1);
+            const fDca = dcaReturns[dcaReturns.length-1].toFixed(1);
+            const fSmart = smartReturns[smartReturns.length-1].toFixed(1);
+            const fPyr = pyrReturns[pyrReturns.length-1].toFixed(1);
             
             document.getElementById('backtestMetrics').innerHTML = `
-                <span class="text-red-600">策略: ${finalStr}%</span> | 
-                <span class="text-green-600">定期定額: ${finalDca}%</span> | 
-                <span class="text-blue-600">全壓: ${finalBh}%</span>
+                <div class="bg-blue-50 text-blue-700 p-2 rounded border border-blue-200">全壓基準: ${fBh}%</div>
+                <div class="bg-green-50 text-green-700 p-2 rounded border border-green-200">傳統定額: ${fDca}%</div>
+                <div class="bg-red-50 text-red-700 p-2 rounded border border-red-200">智能日扣: ${fSmart}%</div>
+                <div class="bg-purple-50 text-purple-700 p-2 rounded border border-purple-200">金字塔: ${fPyr}%</div>
             `;
-            renderCompareChart();
+            
+            renderCompareChart(simDates, bhReturns, dcaReturns, smartReturns, pyrReturns);
         }
 
-        function updateDashboardUI() {
-            document.getElementById('currentPrice').innerText = marketData.close.toFixed(2);
-            
-            let dd = document.getElementById('drawdown');
-            dd.innerText = marketData.drawdown.toFixed(2) + "%";
-            dd.className = `text-xl font-bold ${marketData.drawdown < -15 ? 'text-red-600' : 'text-gray-800'}`;
-            
-            let trend = document.getElementById('trendStatus');
-            if (marketData.close > marketData.ma60) {
-                trend.innerText = "站上季線 (多頭)";
-                trend.className = "text-xl font-bold text-green-600";
-            } else if (marketData.close < marketData.ma20 && marketData.close < marketData.ma60) {
-                trend.innerText = "雙均線破底 (空頭防守)";
-                trend.className = "text-xl font-bold text-red-600";
-            } else {
-                trend.innerText = "震盪盤整";
-                trend.className = "text-xl font-bold text-yellow-600";
-            }
-
-            let zs = document.getElementById('zscore');
-            zs.innerText = marketData.zscore.toFixed(2);
-            zs.className = `text-xl font-bold ${marketData.zscore < -1.5 ? 'text-red-600' : 'text-gray-800'}`;
-        }
-
-        function evaluateStrategy() {
-            const { close, drawdown, ma20, ma60, zscore, macdImproving, rightSideBreakout } = marketData;
-            
-            let state = "WAIT"; 
-            if (drawdown <= -15 || zscore < -1.5) state = "CRISIS";
-            else if (drawdown <= -10 && rightSideBreakout && macdImproving) state = "REBOUND";
-            else if (close > ma60) state = "BULL";
-            else if (close < ma20 && close < ma60) state = "BEAR";
-
-            renderAction(state);
-            renderKlineChart(state); 
-        }
-
-        function renderAction(state) {
-            const container = document.getElementById('actionContainer');
-            const title = document.getElementById('actionTitle');
-            const desc = document.getElementById('actionDesc');
-            const details = document.getElementById('actionDetails');
-            
-            const cash = parseFloat(document.getElementById('cash').value) || 0;
-            const shares = parseFloat(document.getElementById('shares').value) || 0;
-            const price = marketData.close;
-            const currentEquity = cash + (shares * price);
-            
-            if (state === "WAIT") {
-                container.className = "p-6 rounded-lg border-2 text-center bg-gray-50 border-gray-300";
-                title.innerText = "🟡 震盪整理期：維持現有倉位";
-                title.className = "text-2xl font-bold mb-2 text-gray-700";
-                desc.innerText = "大盤介於月線與季線之間，趨勢不明朗，建議暫不作資金調整。";
-                details.innerText = "無建議動作";
-            } 
-            else if (state === "BULL") {
-                let targetStock = currentEquity * 1.0;
-                let buyAmt = targetStock - (shares * price);
-                let buyShares = Math.floor(Math.min(buyAmt, cash) / price);
-                
-                container.className = "p-6 rounded-lg border-2 text-center bg-green-50 border-green-500";
-                title.innerText = "🟢 多頭主升段：維持 100% 滿倉";
-                title.className = "text-2xl font-bold mb-2 text-green-700";
-                desc.innerText = "股價穩站季線之上，趨勢明確向上，請不要輕易預設高點賣出，讓利潤奔跑！";
-                details.innerText = buyShares > 0 ? `建議動用剩餘現金，買入 ${buyShares} 股以達滿倉` : "已達滿倉標準，請安心抱牢";
-            }
-            else if (state === "BEAR") {
-                let targetStock = currentEquity * 0.5;
-                let sellAmt = (shares * price) - targetStock;
-                let sellShares = Math.floor(sellAmt / price);
-                
-                container.className = "p-6 rounded-lg border-2 text-center bg-yellow-50 border-yellow-500";
-                title.innerText = "🛡️ 破線防守：調降倉位至 50%";
-                title.className = "text-2xl font-bold mb-2 text-yellow-700";
-                desc.innerText = "同時跌破月線與季線，為避免大空頭主跌段，強制抽出 50% 資金轉換為現金避險。";
-                details.innerText = sellShares > 0 ? `建議賣出 ${sellShares} 股，收回現金` : "持倉比例已在防守範圍內";
-            }
-            else if (state === "CRISIS" || state === "REBOUND") {
-                let targetStock = currentEquity * 1.0;
-                let buyAmt = targetStock - (shares * price);
-                let buyShares = Math.floor(Math.min(buyAmt, cash) / price);
-
-                container.className = "p-6 rounded-lg border-2 text-center bg-red-50 border-red-600";
-                title.innerText = "🔥 危機入市：重壓 100% 抄底";
-                title.className = "text-2xl font-bold mb-2 text-red-700";
-                desc.innerText = "市場極度恐慌，利用防守期保留的現金，大膽買進便宜籌碼，這是跑贏大盤的關鍵點！";
-                details.innerText = buyShares > 0 ? `強烈建議大舉進場，買入 ${buyShares} 股` : "現金已打滿，等待反彈";
-            }
-        }
-
-        function renderKlineChart(state) {
-            if (!klineChart) klineChart = echarts.init(document.getElementById('klineChart'));
-            
-            const option = {
-                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-                legend: { data: ['日K線', '月線 (20MA)', '季線 (60MA)'], bottom: 0 },
-                grid: { left: '8%', right: '8%', bottom: '15%', top: '5%' },
-                xAxis: { type: 'category', data: klineRawData.dates, scale: true, boundaryGap: false, splitLine: { show: false } },
-                yAxis: { scale: true, splitArea: { show: true } },
-                dataZoom: [{ type: 'inside', start: 60, end: 100 }, { show: true, type: 'slider', top: '85%', start: 60, end: 100 }],
-                series: [
-                    { name: '日K線', type: 'candlestick', data: klineRawData.values, itemStyle: { color: '#ef4444', color0: '#22c55e', borderColor: '#ef4444', borderColor0: '#22c55e' } },
-                    { name: '月線 (20MA)', type: 'line', data: klineRawData.ma20, smooth: true, showSymbol: false, lineStyle: { width: 1.5, color: '#eab308' } },
-                    { name: '季線 (60MA)', type: 'line', data: klineRawData.ma60, smooth: true, showSymbol: false, lineStyle: { width: 2, color: '#3b82f6' } }
-                ]
-            };
-            klineChart.setOption(option);
-        }
-
-        function renderCompareChart() {
+        function renderCompareChart(dates, bhRet, dcaRet, smartRet, pyrRet) {
             if (!compareChart) compareChart = echarts.init(document.getElementById('compareChart'));
             const option = {
                 tooltip: { trigger: 'axis', valueFormatter: (val) => val.toFixed(2) + '%' },
-                legend: { data: ['動態策略 (現金開局)', '1年定期定額', '第一天全壓 (基準)'], bottom: 0 },
+                legend: { data: ['第一天全壓 (基準)', '傳統定額日扣', '智能條件日扣', '金字塔動能加倉'], bottom: 0 },
                 grid: { left: '8%', right: '8%', bottom: '15%', top: '10%' },
-                xAxis: { type: 'category', data: backtestData.dates, boundaryGap: false },
+                xAxis: { type: 'category', data: dates, boundaryGap: false },
                 yAxis: { type: 'value', axisLabel: { formatter: '{value} %' }, splitLine: { lineStyle: { type: 'dashed' } } },
                 dataZoom: [{ type: 'inside' }, { type: 'slider', top: '85%' }],
                 series: [
-                    { name: '動態策略 (現金開局)', type: 'line', data: backtestData.strReturns, showSymbol: false, lineStyle: { width: 2.5, color: '#ef4444' } }, // 紅線加粗
-                    { name: '1年定期定額', type: 'line', data: backtestData.dcaReturns, showSymbol: false, lineStyle: { width: 2, color: '#22c55e' } }, // 綠線
-                    { name: '第一天全壓 (基準)', type: 'line', data: backtestData.bhReturns, showSymbol: false, lineStyle: { width: 1.5, color: '#3b82f6', type: 'dashed' } } // 藍線虛線
+                    { name: '智能條件日扣', type: 'line', data: smartRet, showSymbol: false, lineStyle: { width: 2.5, color: '#ef4444' }, z: 10 }, 
+                    { name: '金字塔動能加倉', type: 'line', data: pyrRet, showSymbol: false, lineStyle: { width: 2.5, color: '#9333ea' }, z: 9 }, 
+                    { name: '傳統定額日扣', type: 'line', data: dcaRet, showSymbol: false, lineStyle: { width: 2, color: '#22c55e' }, z: 8 }, 
+                    { name: '第一天全壓 (基準)', type: 'line', data: bhRet, showSymbol: false, lineStyle: { width: 1.5, color: '#3b82f6', type: 'dashed' }, z: 1 } 
                 ]
             };
             compareChart.setOption(option);
         }
 
-        window.addEventListener('resize', function() { if (klineChart) klineChart.resize(); if (compareChart) compareChart.resize(); });
-
-        function calculatePnL() {
-            const cost = parseFloat(document.getElementById('costPrice').value) || 0;
-            const shares = parseFloat(document.getElementById('shares').value) || 0;
-            const cash = parseFloat(document.getElementById('cash').value) || 0;
+        function renderKlineChart() {
+            if (!klineChart) klineChart = echarts.init(document.getElementById('klineChart'));
             
-            if (marketData.close > 0) {
-                const marketVal = shares * marketData.close;
-                const totalCost = shares * cost;
-                const pnl = totalCost > 0 ? marketVal - totalCost : 0;
-                const pnlPct = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
-                const equity = marketVal + cash;
-
-                document.getElementById('marketValue').innerText = marketVal.toLocaleString(undefined, {maximumFractionDigits: 0});
-                document.getElementById('totalEquity').innerText = equity.toLocaleString(undefined, {maximumFractionDigits: 0});
-                
-                const pnlEl = document.getElementById('pnlAmount');
-                const pnlPctEl = document.getElementById('pnlPercent');
-                
-                pnlEl.innerText = pnl.toLocaleString(undefined, {maximumFractionDigits: 0});
-                pnlPctEl.innerText = pnlPct.toFixed(2) + "%";
-                pnlEl.className = pnl > 0 ? "font-bold text-red-600" : "font-bold text-green-600";
-                pnlPctEl.className = pnl > 0 ? "font-bold text-red-600" : "font-bold text-green-600";
-                
-                evaluateStrategy();
+            let ohlc = [];
+            for(let i=0; i<globalData.dates.length; i++) {
+                ohlc.push([globalData.open[i], globalData.closes[i], globalData.low[i], globalData.high[i]]);
             }
+
+            let markAreaData = [
+                { yAxis: marketData.peak60 * 0.95, itemStyle: { color: 'rgba(59, 130, 246, 0.1)' }, label: { show: true, position: 'insideTopLeft', formatter: '階梯一: 跌破 5%', color: '#1d4ed8' }},
+                { yAxis: marketData.ma20, itemStyle: { color: 'rgba(234, 179, 8, 0.1)' }, label: { show: true, position: 'insideTopLeft', formatter: '階梯二: 月線', color: '#a16207' }},
+                { yAxis: marketData.ma60, itemStyle: { color: 'rgba(249, 115, 22, 0.1)' }, label: { show: true, position: 'insideTopLeft', formatter: '階梯三: 季線', color: '#c2410c' }}
+            ];
+
+            const option = {
+                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                legend: { data: ['日K線', '月線', '季線'], bottom: 0 },
+                grid: { left: '8%', right: '8%', bottom: '15%', top: '5%' },
+                xAxis: { type: 'category', data: globalData.dates, scale: true, boundaryGap: false, splitLine: { show: false } },
+                yAxis: { scale: true, splitArea: { show: true } },
+                dataZoom: [{ type: 'inside', start: 60, end: 100 }, { show: true, type: 'slider', top: '85%', start: 60, end: 100 }],
+                series: [
+                    { name: '日K線', type: 'candlestick', data: ohlc, itemStyle: { color: '#ef4444', color0: '#22c55e', borderColor: '#ef4444', borderColor0: '#22c55e' } },
+                    { name: '月線', type: 'line', data: globalData.ma20, smooth: true, showSymbol: false, lineStyle: { width: 1.5, color: '#eab308' } },
+                    { name: '季線', type: 'line', data: globalData.ma60, smooth: true, showSymbol: false, lineStyle: { width: 2, color: '#3b82f6' } }
+                ]
+            };
+            klineChart.setOption(option);
         }
 
+        window.addEventListener('resize', function() { if (klineChart) klineChart.resize(); if (compareChart) compareChart.resize(); });
         window.onload = fetchData;
     </script>
 </body>
